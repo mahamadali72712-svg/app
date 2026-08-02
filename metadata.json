@@ -1,0 +1,6 @@
+{
+  "name": "إدارة الأعمال",
+  "description": "100% offline native Android application for managing a furniture store. Features products, sales, purchases, and local sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
