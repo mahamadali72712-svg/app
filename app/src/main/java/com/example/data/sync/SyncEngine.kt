@@ -245,6 +245,12 @@ class SyncEngine(private val context: Context, private val db: AppDatabase) {
                     if (walBackup.exists()) walBackup.copyTo(walDb, overwrite = true) else walDb.delete()
                     if (shmBackup.exists()) shmBackup.copyTo(shmDb, overwrite = true) else shmDb.delete()
 
+                    try {
+                        db.invalidationTracker.refreshVersionsAsync()
+                    } catch (e: Exception) {
+                        android.util.Log.e("Restore", "Error invalidating tables", e)
+                    }
+
                     true
                 } else {
                     false
@@ -331,10 +337,19 @@ class SyncEngine(private val context: Context, private val db: AppDatabase) {
                 if (rowId.isNullOrBlank()) continue
 
                 val fileVersion = row.entries.find { it.key.equals("version", ignoreCase = true) }?.value?.toLongOrNull()?.toInt() ?: 1
-                val fileUpdated = row.entries.find { it.key.equals("updatedAt", ignoreCase = true) }?.value?.let {
-                    it.toLongOrNull() ?: it.toDoubleOrNull()?.toLong()
-                } ?: 0L
-                val fileDeleted = row.entries.find { it.key.equals("isDeleted", ignoreCase = true) }?.value?.toLongOrNull()?.toInt() ?: 0
+                val fileUpdatedStr = row.entries.find { it.key.equals("updatedAt", ignoreCase = true) }?.value?.trim() ?: ""
+                val fileUpdated = fileUpdatedStr.toLongOrNull()
+                    ?: fileUpdatedStr.toDoubleOrNull()?.toLong()
+                    ?: try {
+                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(fileUpdatedStr)?.time
+                    } catch (e: Exception) { null }
+                    ?: 0L
+
+                val fileDeletedStr = row.entries.find { it.key.equals("isDeleted", ignoreCase = true) }?.value?.trim() ?: ""
+                val fileDeleted = when (fileDeletedStr.lowercase(Locale.ROOT)) {
+                    "true", "1" -> 1
+                    else -> 0
+                }
 
                 var localVersion = -1
                 var localUpdated = -1L
@@ -347,7 +362,8 @@ class SyncEngine(private val context: Context, private val db: AppDatabase) {
                 }
 
                 val isInsert = localVersion == -1
-                val isUpdate = !isInsert && (fileVersion > localVersion || (fileVersion == localVersion && fileUpdated >= localUpdated))
+                // Smart merge: allow update if record is new, or file version/time is equal or newer, or timestamp is not specified in file
+                val isUpdate = !isInsert && (fileVersion >= localVersion || fileUpdated >= localUpdated || fileUpdated == 0L)
 
                 if (isInsert || isUpdate) {
                     try {
@@ -388,29 +404,35 @@ class SyncEngine(private val context: Context, private val db: AppDatabase) {
                             }
                         }
 
+                        // Ensure default metadata columns are appropriately populated
                         val syncStatusMeta = colMetaMap["syncstatus"]
                         if (syncStatusMeta != null) {
                             cv.put(syncStatusMeta.name, 1)
                         }
 
-                        if (isInsert) {
-                            val res = writableDb.insert(actualTableName, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE, cv)
-                            if (res != -1L) {
+                        val isDeletedMeta = colMetaMap["isdeleted"]
+                        if (isDeletedMeta != null && !cv.containsKey(isDeletedMeta.name)) {
+                            cv.put(isDeletedMeta.name, fileDeleted)
+                        }
+
+                        val updatedAtMeta = colMetaMap["updatedat"]
+                        if (updatedAtMeta != null && !cv.containsKey(updatedAtMeta.name)) {
+                            cv.put(updatedAtMeta.name, if (fileUpdated > 0L) fileUpdated else System.currentTimeMillis())
+                        }
+
+                        val resInsert = writableDb.insert(actualTableName, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE, cv)
+                        if (resInsert != -1L) {
+                            if (isInsert) {
                                 if (fileDeleted == 1) counts[3]++ else counts[0]++
+                            } else {
+                                if (fileDeleted == 1) counts[3]++ else counts[1]++
                             }
                         } else {
-                            val res = writableDb.update(actualTableName, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE, cv, "id = ?", arrayOf(rowId))
-                            if (res > 0) {
-                                if (fileDeleted == 1) counts[3]++ else counts[1]++
-                            } else {
-                                val resInsert = writableDb.insert(actualTableName, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE, cv)
-                                if (resInsert != -1L) {
-                                    if (fileDeleted == 1) counts[3]++ else counts[0]++
-                                }
-                            }
+                            counts[2]++
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("Import", "Error inserting row $rowId in $actualTableName", e)
+                        counts[2]++
                     }
                 } else {
                     counts[2]++

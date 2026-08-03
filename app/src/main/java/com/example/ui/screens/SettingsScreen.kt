@@ -261,10 +261,36 @@ fun SettingsScreen(viewModel: StoreViewModel, navController: androidx.navigation
                         Text("عدد السجلات الإجمالي: ${previewData!!.totalRecords}", fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(8.dp))
                         previewData!!.details.forEach { (table, count) ->
-                            Text("- $table: $count", fontSize = 14.sp)
+                            val arabicTableName = when (table.lowercase(Locale.ROOT)) {
+                                "product_categories" -> "تصنيفات المنتجات"
+                                "products" -> "المنتجات والمخزون"
+                                "customers" -> "العملاء والحسابات"
+                                "suppliers" -> "الموردين والحسابات"
+                                "sales_invoices" -> "فواتير المبيعات"
+                                "sales_invoice_items" -> "تفاصيل فواتير المبيعات"
+                                "purchase_invoices" -> "فواتير المشتريات"
+                                "purchase_invoice_items" -> "تفاصيل فواتير المشتريات"
+                                "expenses" -> "المصاريف والنفقات"
+                                "supplier_payments" -> "سداد الموردين"
+                                "customer_payments" -> "تحصيل العملاء"
+                                "cash_movements" -> "حركات الصندوق الخزينة"
+                                else -> table
+                            }
+                            Text("• $arabicTableName: $count سجل", fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("هل تريد متابعة الدمج الذكي؟", color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Surface(
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "سيتم إجراء الدمج الذكي مع تحديث الكميات والأسعار والتصنيفات تلقائياً إلى أحدث حالة مستوردة.",
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
                     }
                 },
                 confirmButton = {
