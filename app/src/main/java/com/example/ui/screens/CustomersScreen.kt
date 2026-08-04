@@ -44,6 +44,7 @@ fun CustomersScreen(viewModel: StoreViewModel, navController: NavController) {
     var customerToEdit by remember { mutableStateOf<Customer?>(null) }
 
     var showPaymentDialogForCustomer by remember { mutableStateOf<Customer?>(null) }
+    var showPdfDialogForCustomer by remember { mutableStateOf<Customer?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedTab by remember { mutableIntStateOf(0) } // 0: الكل, 1: عليه دين, 2: له مستحقات, 3: متزن
 
@@ -172,6 +173,9 @@ fun CustomersScreen(viewModel: StoreViewModel, navController: NavController) {
                                 onCollectPayment = {
                                     showPaymentDialogForCustomer = customer
                                 },
+                                onSharePdfStatement = {
+                                    showPdfDialogForCustomer = customer
+                                },
                                 onEdit = {
                                     customerToEdit = customer
                                     showAddEditSheet = true
@@ -277,6 +281,15 @@ fun CustomersScreen(viewModel: StoreViewModel, navController: NavController) {
                         }
                     )
                 }
+            )
+        }
+
+        // WhatsApp PDF Statement Dialog
+        showPdfDialogForCustomer?.let { customer ->
+            com.example.ui.components.CustomerPdfStatementDialog(
+                customer = customer,
+                viewModel = viewModel,
+                onDismiss = { showPdfDialogForCustomer = null }
             )
         }
     }
@@ -563,6 +576,7 @@ fun CustomerItemCard(
     customer: Customer,
     onClick: () -> Unit,
     onCollectPayment: () -> Unit,
+    onSharePdfStatement: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -739,6 +753,13 @@ fun CustomerItemCard(
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text("إرسال كشف حساب PDF (واتساب)", color = Color(0xFF15803D), fontWeight = FontWeight.Bold) },
+                                onClick = { showMenu = false; onSharePdfStatement() },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.PictureAsPdf, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(18.dp))
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("تحصيل دفعة مالية") },
                                 onClick = { showMenu = false; onCollectPayment() },
                                 leadingIcon = {
@@ -762,24 +783,45 @@ fun CustomerItemCard(
                         }
                     }
 
-                    // Collect Payment Quick Button
-                    Button(
-                        onClick = { onCollectPayment() },
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF4F46E5),
-                            contentColor = Color.White
-                        ),
-                        modifier = Modifier.height(34.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Payments,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "تحصيل", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        // Quick PDF Statement Button
+                        IconButton(
+                            onClick = { onSharePdfStatement() },
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFE8F5E9))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.PictureAsPdf,
+                                contentDescription = "كشف حساب PDF عبر واتساب",
+                                tint = Color(0xFF15803D),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // Collect Payment Quick Button
+                        Button(
+                            onClick = { onCollectPayment() },
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4F46E5),
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Payments,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "تحصيل", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

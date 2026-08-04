@@ -54,22 +54,34 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
     }
 
 
-    fun addProduct(name: String, cost: Double, suggestedPrice: Double, stock: Double, categoryId: String?, minStockAlert: Double, description: String?, color: String?, size: String?, onSuccess: () -> Unit = {}) {
+    fun addProduct(
+        name: String,
+        cost: Double,
+        suggestedPrice: Double,
+        stock: Double,
+        categoryId: String?,
+        minStockAlert: Double,
+        description: String?,
+        color: String?,
+        size: String?,
+        onSuccess: () -> Unit = {},
+        onSuccessProduct: (Product) -> Unit = {}
+    ) {
         viewModelScope.launch {
-            repository.addProduct(
-                Product(
-                    name = name,
-                    costPrice = cost,
-                    suggestedPrice = suggestedPrice,
-                    stockQuantity = stock,
-                    categoryId = categoryId,
-                    minStockAlert = minStockAlert,
-                    description = description,
-                    color = color,
-                    size = size
-                )
+            val newProd = Product(
+                name = name,
+                costPrice = cost,
+                suggestedPrice = suggestedPrice,
+                stockQuantity = stock,
+                categoryId = categoryId,
+                minStockAlert = minStockAlert,
+                description = description,
+                color = color,
+                size = size
             )
+            repository.addProduct(newProd)
             onSuccess()
+            onSuccessProduct(newProd)
         }
     }
 
@@ -304,10 +316,10 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
         }
     }
 
-    fun exportData(context: android.content.Context, uri: android.net.Uri, isDelta: Boolean = false, onComplete: () -> Unit, onError: (Exception) -> Unit) {
+    fun exportData(context: android.content.Context, uri: android.net.Uri, isDelta: Boolean = false, fromTime: Long? = null, toTime: Long? = null, onComplete: () -> Unit, onError: (Exception) -> Unit) {
         viewModelScope.launch {
             try {
-                repository.syncEngine.exportData(uri, isDelta)
+                repository.syncEngine.exportData(uri, isDelta, fromTime, toTime)
                 onComplete()
             } catch (e: Throwable) {
                 onError(Exception(e))

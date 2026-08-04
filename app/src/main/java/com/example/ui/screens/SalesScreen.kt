@@ -291,12 +291,18 @@ fun SalesScreen(viewModel: StoreViewModel, navController: androidx.navigation.Na
                                                 Toast.LENGTH_SHORT
                                             ).show()
                                         } else {
-                                            item.quantity = newQty
-                                            item.lineTotal = item.unitPrice * item.quantity
-                                            item.lineCost = item.unitCost * item.quantity
-                                            item.lineProfit = item.lineTotal - item.lineCost
+                                            val total = newQty * item.unitPrice
+                                            val cost = newQty * item.unitCost
+                                            val profit = total - cost
                                             val idx = invoiceItems.indexOf(item)
-                                            if (idx != -1) invoiceItems[idx] = item.copy()
+                                            if (idx != -1) {
+                                                invoiceItems[idx] = item.copy(
+                                                    quantity = newQty,
+                                                    lineTotal = total,
+                                                    lineCost = cost,
+                                                    lineProfit = profit
+                                                )
+                                            }
                                         }
                                     }
                                 },
@@ -348,13 +354,19 @@ fun SalesScreen(viewModel: StoreViewModel, navController: androidx.navigation.Na
                     }
                     val existing = invoiceItems.find { it.product.id == product.id }
                     if (existing != null) {
-                        existing.quantity = qty
-                        existing.unitPrice = price
-                        existing.lineTotal = qty * price
-                        existing.lineCost = qty * existing.unitCost
-                        existing.lineProfit = existing.lineTotal - existing.lineCost
                         val idx = invoiceItems.indexOf(existing)
-                        if (idx != -1) invoiceItems[idx] = existing.copy()
+                        if (idx != -1) {
+                            val total = qty * price
+                            val cost = qty * existing.unitCost
+                            val profit = total - cost
+                            invoiceItems[idx] = existing.copy(
+                                quantity = qty,
+                                unitPrice = price,
+                                lineTotal = total,
+                                lineCost = cost,
+                                lineProfit = profit
+                            )
+                        }
                     } else {
                         invoiceItems.add(
                             InvoiceItemUiModel(

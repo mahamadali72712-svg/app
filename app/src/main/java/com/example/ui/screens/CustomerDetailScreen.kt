@@ -61,6 +61,7 @@ fun CustomerDetailScreen(
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: كشف حساب والمعاملات, 1: معلومات التواصل
     var showPaymentDialog by remember { mutableStateOf(false) }
+    var showPdfDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -251,6 +252,25 @@ fun CustomerDetailScreen(
                                 }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // WhatsApp PDF Statement Button
+                        Button(
+                            onClick = { showPdfDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF16A34A),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(Icons.Outlined.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("إرسال كشف حساب (PDF) عبر واتساب", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
                     }
                 }
 
@@ -407,6 +427,15 @@ fun CustomerDetailScreen(
                         }
                     )
                 }
+            )
+        }
+
+        // WhatsApp PDF Statement Dialog
+        if (showPdfDialog && customer != null) {
+            com.example.ui.components.CustomerPdfStatementDialog(
+                customer = customer!!,
+                viewModel = viewModel,
+                onDismiss = { showPdfDialog = false }
             )
         }
     }

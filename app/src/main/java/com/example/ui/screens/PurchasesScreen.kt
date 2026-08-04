@@ -78,6 +78,7 @@ data class PurchaseItemUiModel(
 fun PurchasesScreen(viewModel: StoreViewModel, navController: androidx.navigation.NavController) {
     val products by viewModel.allProducts.collectAsStateWithLifecycle()
     val suppliers by viewModel.allSuppliers.collectAsStateWithLifecycle()
+    val categories by viewModel.allCategories.collectAsStateWithLifecycle()
     val context = LocalContext.current
     
     var supplierId by remember { mutableStateOf("") }
@@ -85,6 +86,7 @@ fun PurchasesScreen(viewModel: StoreViewModel, navController: androidx.navigatio
     
     val invoiceItems = remember { mutableStateListOf<PurchaseItemUiModel>() }
     var showAddProductSheet by remember { mutableStateOf(false) }
+    var showQuickAddProductDialog by remember { mutableStateOf(false) }
     var selectedProductForConfig by remember { mutableStateOf<Product?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
     
@@ -276,16 +278,32 @@ fun PurchasesScreen(viewModel: StoreViewModel, navController: androidx.navigatio
                 item {
                     LuxurySectionCard(title = "المنتجات") {
                         Column {
-                            Button(
-                                onClick = { showAddProductSheet = true },
-                                modifier = Modifier.fillMaxWidth().height(50.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SoftGreen, contentColor = ThemeGreen),
-                                border = borderStrokeForLuxury()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Outlined.AddCircleOutline, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("إضافة منتجات للفاتورة", fontWeight = FontWeight.Bold)
+                                Button(
+                                    onClick = { showAddProductSheet = true },
+                                    modifier = Modifier.weight(1f).height(50.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SoftGreen, contentColor = ThemeGreen),
+                                    border = borderStrokeForLuxury()
+                                ) {
+                                    Icon(Icons.Outlined.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("منتجات مسجلة", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                                
+                                Button(
+                                    onClick = { showQuickAddProductDialog = true },
+                                    modifier = Modifier.weight(1f).height(50.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = ThemeGreen, contentColor = WhitePure)
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = null, tint = WhitePure, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("بضاعة جديدة", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, style = glowingTextStyle)
+                                }
                             }
                             
                             Spacer(modifier = Modifier.height(16.dp))
@@ -299,17 +317,17 @@ fun PurchasesScreen(viewModel: StoreViewModel, navController: androidx.navigatio
                                     LuxuryInvoiceItemCard(
                                         item = item,
                                         onIncrease = {
-                                            item.quantity += 1.0
-                                            item.lineTotal = item.unitCost * item.quantity
-                                            invoiceItems[index] = item.copy()
+                                            val newQty = item.quantity + 1.0
+                                            val newTotal = item.unitCost * newQty
+                                            invoiceItems[index] = item.copy(quantity = newQty, lineTotal = newTotal)
                                         },
                                         onDecrease = {
                                             if (item.quantity <= 1.0) {
                                                 invoiceItems.removeAt(index)
                                             } else {
-                                                item.quantity -= 1.0
-                                                item.lineTotal = item.unitCost * item.quantity
-                                                invoiceItems[index] = item.copy()
+                                                val newQty = item.quantity - 1.0
+                                                val newTotal = item.unitCost * newQty
+                                                invoiceItems[index] = item.copy(quantity = newQty, lineTotal = newTotal)
                                             }
                                         },
                                         onRemove = { invoiceItems.removeAt(index) }
@@ -384,10 +402,43 @@ fun PurchasesScreen(viewModel: StoreViewModel, navController: androidx.navigatio
         ) {
             Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text("تحديد المنتجات للشراء", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary, style = glowingTextStyle)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { showQuickAddProductDialog = true },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SoftGreen),
+                    border = borderStrokeForLuxury()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, tint = ThemeGreen)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "+ تسجيل بضاعة جديدة غير مسجلة بالمخزن",
+                            fontWeight = FontWeight.ExtraBold,
+                            color = ThemeGreen,
+                            fontSize = 14.sp,
+                            style = glowingTextStyle.copy(color = ThemeGreen)
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 if (products.isEmpty()) {
-                    Text("لا توجد منتجات مسجلة.", color = TextSecondary)
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("لا توجد منتجات مسجلة. اضغط الزر أعلاه لتسجيل بضاعة جديدة.", color = TextSecondary, textAlign = TextAlign.Center)
+                    }
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(products) { product ->
@@ -426,10 +477,12 @@ fun PurchasesScreen(viewModel: StoreViewModel, navController: androidx.navigatio
                                             Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(WhitePure).clickable {
                                                 val existingItem = invoiceItems.find { it.product.id == product.id }
                                                 if (existingItem != null) {
-                                                    existingItem.quantity += 1.0
-                                                    existingItem.lineTotal = existingItem.unitCost * existingItem.quantity
                                                     val idx = invoiceItems.indexOf(existingItem)
-                                                    if (idx != -1) invoiceItems[idx] = existingItem.copy()
+                                                    if (idx != -1) {
+                                                        val newQty = existingItem.quantity + 1.0
+                                                        val newTotal = existingItem.unitCost * newQty
+                                                        invoiceItems[idx] = existingItem.copy(quantity = newQty, lineTotal = newTotal)
+                                                    }
                                                 }
                                             }, contentAlignment = Alignment.Center) {
                                                 Text("+", color = ThemeGreen, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, style = glowingTextStyle.copy(color = ThemeGreen))
@@ -443,10 +496,12 @@ fun PurchasesScreen(viewModel: StoreViewModel, navController: androidx.navigatio
                                                     if (existingItem.quantity <= 1.0) {
                                                         invoiceItems.remove(existingItem)
                                                     } else {
-                                                        existingItem.quantity -= 1.0
-                                                        existingItem.lineTotal = existingItem.unitCost * existingItem.quantity
                                                         val idx = invoiceItems.indexOf(existingItem)
-                                                        if (idx != -1) invoiceItems[idx] = existingItem.copy()
+                                                        if (idx != -1) {
+                                                            val newQty = existingItem.quantity - 1.0
+                                                            val newTotal = existingItem.unitCost * newQty
+                                                            invoiceItems[idx] = existingItem.copy(quantity = newQty, lineTotal = newTotal)
+                                                        }
                                                     }
                                                 }
                                             }, contentAlignment = Alignment.Center) {
@@ -477,6 +532,39 @@ fun PurchasesScreen(viewModel: StoreViewModel, navController: androidx.navigatio
                     )
                 )
                 selectedProductForConfig = null
+            }
+        )
+    }
+
+    if (showQuickAddProductDialog) {
+        QuickAddProductForPurchaseDialog(
+            categories = categories,
+            onDismiss = { showQuickAddProductDialog = false },
+            onSave = { name, cost, price, qty, catId, minStock ->
+                viewModel.addProduct(
+                    name = name,
+                    cost = cost,
+                    suggestedPrice = price,
+                    stock = 0.0,
+                    categoryId = catId,
+                    minStockAlert = minStock,
+                    description = null,
+                    color = null,
+                    size = null,
+                    onSuccessProduct = { newProduct ->
+                        invoiceItems.add(
+                            PurchaseItemUiModel(
+                                product = newProduct,
+                                quantity = qty,
+                                unitCost = cost,
+                                lineTotal = qty * cost
+                            )
+                        )
+                        Toast.makeText(context, "تم تسجيل المنتج (${newProduct.name}) وإضافته للفاتورة", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                showQuickAddProductDialog = false
+                showAddProductSheet = false
             }
         )
     }
@@ -708,6 +796,194 @@ fun PurchaseProductConfigDialog(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("تأكيد والإضافة", fontWeight = FontWeight.ExtraBold, color = WhitePure, style = glowingTextStyle)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)) {
+                Text("إلغاء", fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QuickAddProductForPurchaseDialog(
+    categories: List<com.example.data.local.ProductCategory>,
+    onDismiss: () -> Unit,
+    onSave: (
+        name: String,
+        costPrice: Double,
+        suggestedPrice: Double,
+        quantity: Double,
+        categoryId: String?,
+        minStockAlert: Double
+    ) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var costPriceText by remember { mutableStateOf("") }
+    var suggestedPriceText by remember { mutableStateOf("") }
+    var quantityText by remember { mutableStateOf("1") }
+    var selectedCategoryId by remember { mutableStateOf<String?>(null) }
+    var categoryExpanded by remember { mutableStateOf(false) }
+    var minStockText by remember { mutableStateOf("5") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = WhitePure,
+        titleContentColor = ThemeGreen,
+        textContentColor = TextPrimary,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = ThemeGreen)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("تسجيل بضاعة / منتج جديد", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, style = glowingTextStyle.copy(color = ThemeGreen))
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "أدخل تفاصيل المنتج الجديد وسيتم تسجيله تلقائياً في قائمة المنتجات وإضافته مباشرة لهذه الفاتورة:",
+                    fontSize = 13.sp,
+                    color = TextSecondary
+                )
+
+                // Product Name
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("اسم المنتج الجديد *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ThemeGreen,
+                        unfocusedBorderColor = Color(0xFFE0E0E0)
+                    )
+                )
+
+                // Category dropdown
+                if (categories.isNotEmpty()) {
+                    ExposedDropdownMenuBox(
+                        expanded = categoryExpanded,
+                        onExpandedChange = { categoryExpanded = !categoryExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = categories.find { it.id == selectedCategoryId }?.name ?: "اختر التصنيف (اختياري)",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("التصنيف") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ThemeGreen,
+                                unfocusedBorderColor = Color(0xFFE0E0E0)
+                            )
+                        )
+                        ExposedDropdownMenu(
+                            expanded = categoryExpanded,
+                            onDismissRequest = { categoryExpanded = false },
+                            modifier = Modifier.background(WhitePure)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("بدون تصنيف (عام)") },
+                                onClick = {
+                                    selectedCategoryId = null
+                                    categoryExpanded = false
+                                }
+                            )
+                            categories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat.name) },
+                                    onClick = {
+                                        selectedCategoryId = cat.id
+                                        categoryExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Prices
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = costPriceText,
+                        onValueChange = { costPriceText = it },
+                        label = { Text("سعر الشراء (التكلفة) *") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ThemeGreen,
+                            unfocusedBorderColor = Color(0xFFE0E0E0)
+                        )
+                    )
+                    OutlinedTextField(
+                        value = suggestedPriceText,
+                        onValueChange = { suggestedPriceText = it },
+                        label = { Text("سعر البيع للعميل *") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ThemeGreen,
+                            unfocusedBorderColor = Color(0xFFE0E0E0)
+                        )
+                    )
+                }
+
+                // Quantity and Min Stock Alert
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = quantityText,
+                        onValueChange = { quantityText = it },
+                        label = { Text("الكمية المشتراة *") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ThemeGreen,
+                            unfocusedBorderColor = Color(0xFFE0E0E0)
+                        )
+                    )
+                    OutlinedTextField(
+                        value = minStockText,
+                        onValueChange = { minStockText = it },
+                        label = { Text("تنبيه نقص المخزون") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ThemeGreen,
+                            unfocusedBorderColor = Color(0xFFE0E0E0)
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val cost = costPriceText.toDoubleOrNull() ?: 0.0
+                    val price = suggestedPriceText.toDoubleOrNull() ?: 0.0
+                    val qty = quantityText.toDoubleOrNull() ?: 0.0
+                    val minStock = minStockText.toDoubleOrNull() ?: 5.0
+
+                    if (name.isNotBlank() && cost > 0 && price >= 0 && qty > 0) {
+                        onSave(name.trim(), cost, price, qty, selectedCategoryId, minStock)
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = ThemeGreen),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("حفظ وإضافة للفاتورة", fontWeight = FontWeight.ExtraBold, color = WhitePure, style = glowingTextStyle)
             }
         },
         dismissButton = {

@@ -62,7 +62,7 @@ class SyncEngine(private val context: Context, private val db: AppDatabase) {
         "cash_movements"
     )
 
-    suspend fun exportData(uri: Uri, isDelta: Boolean = false) {
+    suspend fun exportData(uri: Uri, isDelta: Boolean = false, fromTime: Long? = null, toTime: Long? = null) {
         withContext(Dispatchers.IO) {
             val tempFile = File(context.cacheDir, "export_temp_${System.currentTimeMillis()}.xlsx")
             try {
@@ -79,16 +79,34 @@ class SyncEngine(private val context: Context, private val db: AppDatabase) {
                     metaSheet.value(2, 1, deviceId)
                     metaSheet.value(3, 0, "format_version")
                     metaSheet.value(3, 1, "2.0")
+                    if (fromTime != null && toTime != null) {
+                        metaSheet.value(4, 0, "filter_from")
+                        metaSheet.value(4, 1, fromTime.toString())
+                        metaSheet.value(5, 0, "filter_to")
+                        metaSheet.value(5, 1, toTime.toString())
+                    }
 
                     val writableDb = db.openHelper.writableDatabase
 
                     tablesToSync.forEach { tableName ->
                         val sheet = wb.newWorksheet(tableName)
 
-                        val queryStr = if (isDelta) {
-                            "SELECT * FROM $tableName WHERE syncStatus = 0 OR syncStatus = 2"
+                        val colMetaMap = getTableColumnMeta(writableDb, tableName)
+                        val hasUpdatedAt = colMetaMap.containsKey("updatedat")
+                        val hasDate = colMetaMap.containsKey("date")
+
+                        var queryStr = if (isDelta) {
+                            "SELECT * FROM $tableName WHERE (syncStatus = 0 OR syncStatus = 2)"
                         } else {
-                            "SELECT * FROM $tableName"
+                            "SELECT * FROM $tableName WHERE 1=1"
+                        }
+
+                        if (fromTime != null && toTime != null) {
+                            if (hasUpdatedAt) {
+                                queryStr += " AND (updatedAt >= $fromTime AND updatedAt <= $toTime)"
+                            } else if (hasDate) {
+                                queryStr += " AND (date >= $fromTime AND date <= $toTime)"
+                            }
                         }
 
                         writableDb.query(queryStr).use { cursor ->
@@ -329,9 +347,12 @@ class SyncEngine(private val context: Context, private val db: AppDatabase) {
         val writableDb = db.openHelper.writableDatabase
         val colMetaMap = getTableColumnMeta(writableDb, actualTableName)
 
+        val prefs = context.getSharedPreferences("store_settings", android.content.Context.MODE_PRIVATE)
+        val syncMode = prefs.getString("sync_mode", "SMART_MERGE") ?: "SMART_MERGE"
+
         writableDb.beginTransaction()
         try {
-            android.util.Log.d("Import", "Insert batch for $actualTableName: ${rows.size} rows")
+            android.util.Log.d("Import", "Insert batch for $actualTableName: ${rows.size} rows (syncMode=$syncMode)")
             for (row in rows) {
                 val rowId = row.entries.find { it.key.equals("id", ignoreCase = true) }?.value?.trim()
                 if (rowId.isNullOrBlank()) continue
@@ -362,8 +383,11 @@ class SyncEngine(private val context: Context, private val db: AppDatabase) {
                 }
 
                 val isInsert = localVersion == -1
-                // Smart merge: allow update if record is new, or file version/time is equal or newer, or timestamp is not specified in file
-                val isUpdate = !isInsert && (fileVersion >= localVersion || fileUpdated >= localUpdated || fileUpdated == 0L)
+                val isUpdate = when (syncMode) {
+                    "SKIP_EXISTING" -> false
+                    "FORCE_OVERWRITE" -> !isInsert
+                    else -> !isInsert && (fileVersion >= localVersion || fileUpdated >= localUpdated || fileUpdated == 0L)
+                }
 
                 if (isInsert || isUpdate) {
                     try {
@@ -451,16 +475,21 @@ class SyncEngine(private val context: Context, private val db: AppDatabase) {
         onProgress: (Int, String) -> Unit = { _, _ -> }
     ): SyncResult {
         return withContext(Dispatchers.IO) {
-            onProgress(0, "إنشاء نسخة احتياطية...")
-            val backupFile = File(context.filesDir, "pre_import_${System.currentTimeMillis()}.db")
-            try {
-                val dbFile = context.getDatabasePath("furniture_store_db")
-                if (dbFile.exists()) {
-                    db.openHelper.writableDatabase.execSQL("PRAGMA wal_checkpoint(FULL)")
-                    dbFile.copyTo(backupFile, overwrite = true)
+            val prefs = context.getSharedPreferences("store_settings", android.content.Context.MODE_PRIVATE)
+            val autoBackup = prefs.getBoolean("auto_backup", true)
+
+            if (autoBackup) {
+                onProgress(0, "إنشاء نسخة احتياطية...")
+                val backupFile = File(context.filesDir, "pre_import_${System.currentTimeMillis()}.db")
+                try {
+                    val dbFile = context.getDatabasePath("furniture_store_db")
+                    if (dbFile.exists()) {
+                        db.openHelper.writableDatabase.execSQL("PRAGMA wal_checkpoint(FULL)")
+                        dbFile.copyTo(backupFile, overwrite = true)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
 
             android.util.Log.d("Import", "Starting import from URI: $uri")

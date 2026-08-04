@@ -13,7 +13,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -591,22 +594,23 @@ fun LuxurySearchBar(query: String, onQueryChange: (String) -> Unit) {
                 modifier = Modifier.padding(start = 12.dp, end = 6.dp).size(20.dp)
             )
             
-            TextField(
+            BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("ابحث عن اسم المنتج، الوصف...", color = Color(0xFF8C93BD), fontSize = 14.sp) },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black
-                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 4.dp),
                 singleLine = true,
-                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp, color = Color.Black)
+                textStyle = TextStyle(fontSize = 14.sp, color = Color.Black),
+                cursorBrush = SolidColor(GlowPurple),
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (query.isEmpty()) {
+                            Text("ابحث عن اسم المنتج، الوصف...", color = Color(0xFF8C93BD), fontSize = 14.sp)
+                        }
+                        innerTextField()
+                    }
+                }
             )
             
             if (query.isNotEmpty()) {
