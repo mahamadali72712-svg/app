@@ -3,6 +3,7 @@ package com.example.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.utils.*
 import com.example.data.local.CashMovement
 import com.example.data.local.Product
 import com.example.data.local.SalesInvoiceItem
@@ -143,11 +144,11 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     val totalSupplierDebts: StateFlow<Double> = repository.allSuppliers
-        .map { suppliers -> suppliers.sumOf { it.balance.coerceAtLeast(0.0) } }
+        .map { suppliers -> suppliers.preciseSumOf { it.balance.coerceAtLeast(0.0) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     val totalCustomerDebts: StateFlow<Double> = repository.allCustomers
-        .map { customers -> customers.sumOf { it.balance.coerceAtLeast(0.0) } }
+        .map { customers -> customers.preciseSumOf { it.balance.coerceAtLeast(0.0) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     val totalProfit: StateFlow<Double> = repository.totalProfit
@@ -372,6 +373,20 @@ class StoreViewModel(private val repository: StoreRepository) : ViewModel() {
         }
     }
     
+    fun voidSalesInvoice(invoiceId: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.voidSalesInvoice(invoiceId)
+            onSuccess()
+        }
+    }
+
+    fun voidPurchaseInvoice(invoiceId: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.voidPurchaseInvoice(invoiceId)
+            onSuccess()
+        }
+    }
+
     fun resetImportState() {
         _importState.value = com.example.data.sync.ImportState.Idle
     }

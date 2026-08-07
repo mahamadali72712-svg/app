@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import com.example.data.local.*
+import com.example.utils.*
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -192,7 +193,7 @@ class StoreRepository(
         paidAmount: Double
     ) {
         val invoiceId = UUID.randomUUID().toString()
-        val totalAmount = items.sumOf { it.lineTotal } - discount
+        val totalAmount = items.preciseSumOf { it.lineTotal }.preciseSubtract(discount)
 
         val invoice = PurchaseInvoice(
             id = invoiceId,
@@ -202,7 +203,8 @@ class StoreRepository(
             totalAmount = totalAmount,
             discount = discount,
             paidAmount = paidAmount,
-            remainingAmount = totalAmount - paidAmount
+            remainingAmount = totalAmount.preciseSubtract(paidAmount),
+            status = if (totalAmount.preciseSubtract(paidAmount) <= 0.0) "PAID" else if (paidAmount > 0.0) "PARTIALLY_PAID" else "POSTED"
         )
 
         val updatedItems = items.map { it.copy(invoiceId = invoiceId) }
@@ -263,11 +265,11 @@ class StoreRepository(
         returnAmount: Double
     ) {
         val returnInvoiceId = java.util.UUID.randomUUID().toString()
-        val totalReturnAmount = returnItems.sumOf { it.lineTotal }
-        val totalReturnCost = returnItems.sumOf { it.lineCost }
-        val totalReturnProfit = returnItems.sumOf { it.lineProfit }
+        val totalReturnAmount = returnItems.preciseSumOf { it.lineTotal }
+        val totalReturnCost = returnItems.preciseSumOf { it.lineCost }
+        val totalReturnProfit = returnItems.preciseSumOf { it.lineProfit }
         
-        // Save as a SalesInvoice with status = "RETURN" and negative values
+        // Save as a SalesInvoice with status = "RETURNED" and negative values
         val invoice = SalesInvoice(
             id = returnInvoiceId,
             invoiceNumber = "RET-${System.currentTimeMillis()}",
@@ -280,7 +282,7 @@ class StoreRepository(
             paidAmount = if (refundCash) -returnAmount else 0.0,
             remainingAmount = if (!refundCash) -returnAmount else 0.0,
             totalProfit = -totalReturnProfit,
-            status = "RETURN"
+            status = "RETURNED"
         )
 
         val updatedItems = returnItems.map { 
@@ -332,10 +334,10 @@ class StoreRepository(
         paidAmount: Double
     ) {
         val invoiceId = UUID.randomUUID().toString()
-        val totalAmount = items.sumOf { it.lineTotal } - discount
-        val totalCost = items.sumOf { it.lineCost }
-        val totalProfit = items.sumOf { it.lineProfit } - discount
-        val remainingAmount = totalAmount - paidAmount
+        val totalAmount = items.preciseSumOf { it.lineTotal }.preciseSubtract(discount)
+        val totalCost = items.preciseSumOf { it.lineCost }
+        val totalProfit = items.preciseSumOf { it.lineProfit }.preciseSubtract(discount)
+        val remainingAmount = totalAmount.preciseSubtract(paidAmount)
 
         val invoice = SalesInvoice(
             id = invoiceId,
@@ -348,7 +350,8 @@ class StoreRepository(
             discount = discount,
             paidAmount = paidAmount,
             remainingAmount = remainingAmount,
-            totalProfit = totalProfit
+            totalProfit = totalProfit,
+            status = if (remainingAmount <= 0.0) "PAID" else if (paidAmount > 0.0) "PARTIALLY_PAID" else "POSTED"
         )
 
         val updatedItems = items.map { it.copy(invoiceId = invoiceId) }
@@ -378,6 +381,86 @@ class StoreRepository(
                 note = "Sale Payment"
             )
             financeDao.insertCashMovement(cm)
+        }
+    }
+
+    suspend fun voidSalesInvoice(invoiceId: String) {
+        val invoice = salesDao.getInvoiceById(invoiceId) ?: return
+        if (invoice.status == "VOIDED") return
+
+        // 1. Mark status as VOIDED
+        val voidedInvoice = invoice.copy(
+            status = "VOIDED",
+            updatedAt = System.currentTimeMillis(),
+            syncStatus = 0
+        )
+        salesDao.insertInvoice(voidedInvoice)
+
+        // 2. Fetch invoice items
+        val items = salesDao.getInvoiceItems(invoiceId)
+
+        // 3. Reverse Stock (Add items back to stock)
+        items.forEach { item ->
+            productDao.updateStock(item.productId, item.quantity)
+        }
+
+        // 4. Reverse Customer Balance
+        if (invoice.remainingAmount > 0 && invoice.customerId != null) {
+            partiesDao.updateCustomerBalance(invoice.customerId, -invoice.remainingAmount)
+        }
+
+        // 5. Reverse Cash Movement (Insert opposite OUT movement)
+        if (invoice.paidAmount > 0) {
+            financeDao.insertCashMovement(
+                CashMovement(
+                    movementType = "SALE_REVERSAL",
+                    direction = "OUT",
+                    amount = invoice.paidAmount,
+                    referenceType = "SALES_INVOICE",
+                    referenceId = invoiceId,
+                    note = "عكس فاتورة مبيعات ملغاة #${invoice.invoiceNumber}"
+                )
+            )
+        }
+    }
+
+    suspend fun voidPurchaseInvoice(invoiceId: String) {
+        val invoice = purchaseDao.getInvoiceById(invoiceId) ?: return
+        if (invoice.status == "VOIDED") return
+
+        // 1. Mark status as VOIDED
+        val voidedInvoice = invoice.copy(
+            status = "VOIDED",
+            updatedAt = System.currentTimeMillis(),
+            syncStatus = 0
+        )
+        purchaseDao.insertInvoice(voidedInvoice)
+
+        // 2. Fetch invoice items
+        val items = purchaseDao.getInvoiceItems(invoiceId)
+
+        // 3. Reverse Stock (Deduct items from stock)
+        items.forEach { item ->
+            productDao.updateStock(item.productId, -item.quantity)
+        }
+
+        // 4. Reverse Supplier Balance
+        if (invoice.remainingAmount > 0) {
+            partiesDao.updateSupplierBalance(invoice.supplierId, -invoice.remainingAmount)
+        }
+
+        // 5. Reverse Cash Movement (Insert opposite IN movement)
+        if (invoice.paidAmount > 0) {
+            financeDao.insertCashMovement(
+                CashMovement(
+                    movementType = "PURCHASE_REVERSAL",
+                    direction = "IN",
+                    amount = invoice.paidAmount,
+                    referenceType = "PURCHASE_INVOICE",
+                    referenceId = invoiceId,
+                    note = "عكس فاتورة مشتريات ملغاة #${invoice.invoiceNumber}"
+                )
+            )
         }
     }
 }

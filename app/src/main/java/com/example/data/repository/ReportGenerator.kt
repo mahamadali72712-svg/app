@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import com.example.data.local.*
+import com.example.utils.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,17 +30,17 @@ class ReportGenerator(
         val periodExpenses = allExpenses.filter { it.expenseDate in startDate..endDate }
         
         // 1. Sales Report Card
-        val totalSales = periodSales.sumOf { it.totalAmount }
+        val totalSales = periodSales.preciseSumOf { it.totalAmount }
         val invoiceCount = periodSales.size
-        val cashSales = periodSales.sumOf { it.paidAmount }
-        val creditSales = periodSales.sumOf { it.remainingAmount }
-        val grossProfit = periodSales.sumOf { it.totalProfit }
+        val cashSales = periodSales.preciseSumOf { it.paidAmount }
+        val creditSales = periodSales.preciseSumOf { it.remainingAmount }
+        val grossProfit = periodSales.preciseSumOf { it.totalProfit }
         
         val operationalExpensesList = periodExpenses.filter { it.expenseType == "OPERATIONAL" }
-        val totalOpExpenses = operationalExpensesList.sumOf { it.amount }
-        val netOperatingProfit = grossProfit - totalOpExpenses
+        val totalOpExpenses = operationalExpensesList.preciseSumOf { it.amount }
+        val netOperatingProfit = grossProfit.preciseSubtract(totalOpExpenses)
         
-        val ownerDraw = periodExpenses.filter { it.expenseType == "PERSONAL" }.sumOf { it.amount }
+        val ownerDraw = periodExpenses.filter { it.expenseType == "PERSONAL" }.preciseSumOf { it.amount }
         
         // 2. Best Selling & Loss Products
         val productStatsMap = mutableMapOf<String, ProductStat>()
@@ -48,9 +49,9 @@ class ReportGenerator(
             val name = product?.name ?: "منتج محذوف"
             val stat = productStatsMap.getOrDefault(item.productId, ProductStat(item.productId, name, 0.0, 0.0, 0.0))
             productStatsMap[item.productId] = stat.copy(
-                profit = stat.profit + item.lineProfit,
-                qty = stat.qty + item.quantity,
-                totalSales = stat.totalSales + item.lineTotal
+                profit = stat.profit.preciseAdd(item.lineProfit),
+                qty = stat.qty.preciseAdd(item.quantity),
+                totalSales = stat.totalSales.preciseAdd(item.lineTotal)
             )
         }
         
@@ -61,29 +62,29 @@ class ReportGenerator(
         
         // 3. Expenses Breakdown
         val expensesByCategory = operationalExpensesList.groupBy { it.categoryId }
-            .mapValues { (_, expenses) -> expenses.sumOf { it.amount } }
+            .mapValues { (_, expenses) -> expenses.preciseSumOf { it.amount } }
             
         // 4. Cashbox Report
-        val priorCashIn = allCash.filter { it.movementDate < startDate && it.direction == "IN" }.sumOf { it.amount }
-        val priorCashOut = allCash.filter { it.movementDate < startDate && it.direction == "OUT" }.sumOf { it.amount }
-        val openingCashBalance = priorCashIn - priorCashOut
+        val priorCashIn = allCash.filter { it.movementDate < startDate && it.direction == "IN" }.preciseSumOf { it.amount }
+        val priorCashOut = allCash.filter { it.movementDate < startDate && it.direction == "OUT" }.preciseSumOf { it.amount }
+        val openingCashBalance = priorCashIn.preciseSubtract(priorCashOut)
         
-        val periodCashIn = allCash.filter { it.movementDate in startDate..endDate && it.direction == "IN" }.sumOf { it.amount }
-        val periodCashOut = allCash.filter { it.movementDate in startDate..endDate && it.direction == "OUT" }.sumOf { it.amount }
-        val closingCashBalance = openingCashBalance + periodCashIn - periodCashOut
+        val periodCashIn = allCash.filter { it.movementDate in startDate..endDate && it.direction == "IN" }.preciseSumOf { it.amount }
+        val periodCashOut = allCash.filter { it.movementDate in startDate..endDate && it.direction == "OUT" }.preciseSumOf { it.amount }
+        val closingCashBalance = openingCashBalance.preciseAdd(periodCashIn).preciseSubtract(periodCashOut)
         
         // 5. Debts Summary (always current snapshot)
-        val totalSupplierDebts = allSuppliers.sumOf { it.balance.coerceAtLeast(0.0) }
-        val totalCustomerDebts = allCustomers.sumOf { it.balance.coerceAtLeast(0.0) }
+        val totalSupplierDebts = allSuppliers.preciseSumOf { it.balance.coerceAtLeast(0.0) }
+        val totalCustomerDebts = allCustomers.preciseSumOf { it.balance.coerceAtLeast(0.0) }
         
         // 6. Charts Data
         val sdf = SimpleDateFormat("MM-dd", Locale.getDefault())
         val dailySales = periodSales.groupBy { sdf.format(Date(it.invoiceDate)) }
-            .mapValues { (_, invoices) -> invoices.sumOf { it.totalAmount } }
+            .mapValues { (_, invoices) -> invoices.preciseSumOf { it.totalAmount } }
             .toSortedMap()
             
         val dailyProfit = periodSales.groupBy { sdf.format(Date(it.invoiceDate)) }
-            .mapValues { (_, invoices) -> invoices.sumOf { it.totalProfit } }
+            .mapValues { (_, invoices) -> invoices.preciseSumOf { it.totalProfit } }
             .toSortedMap()
             
         val salesByCategory = mutableMapOf<String, Double>()
@@ -92,7 +93,7 @@ class ReportGenerator(
         for (item in periodItems) {
             val product = allProducts[item.productId]
             val catId = product?.categoryId ?: "أخرى"
-            salesByCategory[catId] = salesByCategory.getOrDefault(catId, 0.0) + item.lineTotal
+            salesByCategory[catId] = salesByCategory.getOrDefault(catId, 0.0).preciseAdd(item.lineTotal)
         }
         
         return ReportData(

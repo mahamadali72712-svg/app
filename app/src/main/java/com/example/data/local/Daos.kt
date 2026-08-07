@@ -51,6 +51,9 @@ interface SalesDao {
     @Query("SELECT * FROM sales_invoices WHERE isDeleted = 0 ORDER BY invoiceDate DESC")
     fun getAllInvoices(): Flow<List<SalesInvoice>>
 
+    @Query("SELECT * FROM sales_invoices WHERE id = :id")
+    suspend fun getInvoiceById(id: String): SalesInvoice?
+
     @Query("SELECT * FROM sales_invoices")
     suspend fun getExportInvoices(): List<SalesInvoice>
 
@@ -83,6 +86,9 @@ interface SalesDao {
 interface PurchaseDao {
     @Query("SELECT * FROM purchase_invoices WHERE isDeleted = 0 ORDER BY invoiceDate DESC")
     fun getAllInvoices(): Flow<List<PurchaseInvoice>>
+
+    @Query("SELECT * FROM purchase_invoices WHERE id = :id")
+    suspend fun getInvoiceById(id: String): PurchaseInvoice?
 
     @Query("SELECT * FROM purchase_invoices")
     suspend fun getExportInvoices(): List<PurchaseInvoice>
